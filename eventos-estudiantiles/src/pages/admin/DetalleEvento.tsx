@@ -183,26 +183,6 @@ function formatearHora(
     second: "2-digit",
   });
 }
-
-function formatearFechaHora(
-  valor: string | null | undefined,
-): string {
-  if (!valor) {
-    return "—";
-  }
-
-  const fecha = new Date(valor);
-
-  if (Number.isNaN(fecha.getTime())) {
-    return valor;
-  }
-
-  return fecha.toLocaleString("es-MX", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
-
 function generarNombreArchivoReporte(
   datos: DatosReporte,
 ): string {
