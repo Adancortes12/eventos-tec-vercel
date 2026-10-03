@@ -50,20 +50,29 @@ export default defineConfig({
       },
 
       workbox: {
-  navigateFallback: "/index.html",
+        navigateFallback: "/index.html",
 
-  navigateFallbackAllowlist: [
-    /^\/$/,
-    /^\/evento\/[^/]+$/,
-    /^\/mis-eventos$/,
-    /^\/admin$/,
-    /^\/admin\/.*$/,
-  ],
+        navigateFallbackAllowlist: [
+          /^\/$/,
+          /^\/evento\/[^/]+$/,
+          /^\/mis-eventos$/,
+          /^\/admin$/,
+          /^\/admin\/.*$/,
+        ],
 
-  cleanupOutdatedCaches: true,
-  clientsClaim: true,
-  skipWaiting: true,
-},
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+      },
     }),
   ],
+
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+    },
+  },
 });

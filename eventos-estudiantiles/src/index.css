@@ -71,7 +71,7 @@ h1,
 h2 {
   font-family: var(--heading);
   font-weight: 500;
-  color: var(--text-h);
+  color: black;
 }
 
 h1 {
@@ -109,4 +109,42 @@ code {
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+}
+@media print {
+  /*
+   * Ocultar toda la aplicación
+   */
+  body.modo-impresion * {
+    visibility: hidden !important;
+  }
+
+  /*
+   * Mostrar únicamente el reporte
+   */
+  body.modo-impresion .reporte-impresion,
+  body.modo-impresion .reporte-impresion * {
+    visibility: visible !important;
+  }
+
+  /*
+   * Colocar el reporte desde arriba
+   */
+  body.modo-impresion .reporte-impresion {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  /*
+   * Ocultar botones y controles
+   */
+  body.modo-impresion .no-print {
+    display: none !important;
+  }
+
+  @page {
+    margin: 12mm;
+  }
 }
