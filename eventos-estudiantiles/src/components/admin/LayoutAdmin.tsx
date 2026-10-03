@@ -234,7 +234,7 @@ export default function LayoutAdmin() {
               <div>
                 <h1 className="font-bold text-white">Eventos</h1>
 
-                <p className="text-sm text-slate-400">Panel de gestión</p>
+                <p className="text-sm text-slate-400">Panel de gestión del administrador</p>
               </div>
             </div>
           </div>
