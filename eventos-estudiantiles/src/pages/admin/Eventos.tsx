@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+
 import {
   Link,
   useOutletContext,
@@ -34,10 +35,9 @@ type FiltroEstado =
   | "finalizado";
 
 export default function Eventos() {
-    
   const {
-  abrirModalNuevoEvento,
-  puedeCrearEventos,
+    abrirModalNuevoEvento,
+    puedeCrearEventos,
   } = useOutletContext<ContextoAdmin>();
 
   const [eventos, setEventos] =
@@ -55,21 +55,37 @@ export default function Eventos() {
   const [error, setError] =
     useState("");
 
+  /*
+   * Guarda el ID del evento que se está
+   * finalizando para evitar doble clic.
+   */
+  const [
+    eventoFinalizandoId,
+    setEventoFinalizandoId,
+  ] = useState<string | null>(null);
+
+  /*
+   * =====================================
+   * CARGAR EVENTOS
+   * =====================================
+   */
   useEffect(() => {
     const cargarEventos = async () => {
       setCargando(true);
       setError("");
 
-      const { data, error } =
-        await supabase
-          .from("eventos")
-          .select("*")
-          .order("fecha_evento", {
-            ascending: true,
-          });
+      const {
+        data,
+        error: errorConsulta,
+      } = await supabase
+        .from("eventos")
+        .select("*")
+        .order("fecha_evento", {
+          ascending: true,
+        });
 
-      if (error) {
-        console.error(error);
+      if (errorConsulta) {
+        console.error(errorConsulta);
 
         setError(
           "No se pudieron cargar los eventos."
@@ -86,6 +102,11 @@ export default function Eventos() {
     cargarEventos();
   }, []);
 
+  /*
+   * =====================================
+   * FILTRAR EVENTOS
+   * =====================================
+   */
   const eventosFiltrados =
     useMemo(() => {
       const texto =
@@ -121,6 +142,11 @@ export default function Eventos() {
       filtroEstado,
     ]);
 
+  /*
+   * =====================================
+   * TOTALES
+   * =====================================
+   */
   const totalActivos =
     eventos.filter(
       (evento) =>
@@ -134,9 +160,110 @@ export default function Eventos() {
         "finalizado"
     ).length;
 
+  /*
+   * =====================================
+   * FINALIZAR EVENTO
+   * =====================================
+   */
+  const finalizarEvento = async (
+    evento: Evento
+  ) => {
+    if (
+      evento.estado !== "activo" ||
+      eventoFinalizandoId
+    ) {
+      return;
+    }
+
+    const confirmar =
+      window.confirm(
+        `¿Seguro que quieres finalizar el evento "${evento.nombre}"?`
+      );
+
+    if (!confirmar) {
+      return;
+    }
+
+    setEventoFinalizandoId(
+      evento.id
+    );
+
+    try {
+      const respuesta =
+        await fetch(
+          "/api/eventos/finalizar",
+          {
+            method: "PATCH",
+
+            credentials:
+              "include",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              eventoId:
+                evento.id,
+            }),
+          }
+        );
+
+      const datos =
+        await respuesta.json();
+
+      if (!respuesta.ok) {
+        window.alert(
+          datos.error ??
+            "No se pudo finalizar el evento."
+        );
+
+        return;
+      }
+
+      /*
+       * Actualizamos solamente el evento
+       * modificado en el estado local.
+       *
+       * Así no necesitamos recargar
+       * toda la página.
+       */
+      setEventos(
+        (eventosActuales) =>
+          eventosActuales.map(
+            (eventoActual) =>
+              eventoActual.id ===
+              evento.id
+                ? {
+                    ...eventoActual,
+                    estado:
+                      "finalizado",
+                  }
+                : eventoActual
+          )
+      );
+    } catch (errorConsulta) {
+      console.error(
+        errorConsulta
+      );
+
+      window.alert(
+        "No se pudo conectar con el servidor."
+      );
+    } finally {
+      setEventoFinalizandoId(
+        null
+      );
+    }
+  };
+
   return (
     <div>
-      {/* Encabezado */}
+      {/* =====================================
+          ENCABEZADO
+      ====================================== */}
+
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-[#1B396A]">
@@ -148,27 +275,32 @@ export default function Eventos() {
           </h1>
 
           <p className="mt-2 text-gray-600">
-  {puedeCrearEventos
-    ? "Consulta y administra los eventos registrados."
-    : "Consulta los eventos y registra asistencias."}
-</p>
+            {puedeCrearEventos
+              ? "Consulta y administra los eventos registrados."
+              : "Consulta los eventos y registra asistencias."}
+          </p>
         </div>
 
         {puedeCrearEventos && (
-  <button
-    type="button"
-    onClick={
-      abrirModalNuevoEvento
-    }
-    className="w-fit rounded-xl bg-[#1B396A] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
-  >
-    + Nuevo evento
-  </button>
-)}
+          <button
+            type="button"
+            onClick={
+              abrirModalNuevoEvento
+            }
+            className="w-fit rounded-xl bg-[#1B396A] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+          >
+            + Nuevo evento
+          </button>
+        )}
       </div>
 
-      {/* Resumen */}
+      {/* =====================================
+          RESUMEN
+      ====================================== */}
+
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
+        {/* TOTAL */}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-gray-600">
             Total
@@ -179,6 +311,8 @@ export default function Eventos() {
           </p>
         </div>
 
+        {/* ACTIVOS */}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-gray-600">
             Activos
@@ -188,6 +322,8 @@ export default function Eventos() {
             {totalActivos}
           </p>
         </div>
+
+        {/* FINALIZADOS */}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-gray-600">
@@ -200,9 +336,14 @@ export default function Eventos() {
         </div>
       </div>
 
-      {/* Búsqueda y filtros */}
+      {/* =====================================
+          BÚSQUEDA Y FILTROS
+      ====================================== */}
+
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          {/* BUSCADOR */}
+
           <div className="w-full lg:max-w-md">
             <label className="sr-only">
               Buscar evento
@@ -221,7 +362,11 @@ export default function Eventos() {
             />
           </div>
 
+          {/* FILTROS */}
+
           <div className="flex flex-wrap gap-2">
+            {/* TODOS */}
+
             <button
               type="button"
               onClick={() =>
@@ -239,6 +384,8 @@ export default function Eventos() {
               Todos
             </button>
 
+            {/* ACTIVOS */}
+
             <button
               type="button"
               onClick={() =>
@@ -255,6 +402,8 @@ export default function Eventos() {
             >
               Activos
             </button>
+
+            {/* FINALIZADOS */}
 
             <button
               type="button"
@@ -276,7 +425,10 @@ export default function Eventos() {
         </div>
       </div>
 
-      {/* Estados */}
+      {/* =====================================
+          ESTADOS
+      ====================================== */}
+
       {cargando && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
           <p className="text-gray-600">
@@ -297,21 +449,28 @@ export default function Eventos() {
           0 && (
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
             <h2 className="font-semibold text-slate-800">
-              No se encontraron eventos
+              No se encontraron
+              eventos
             </h2>
 
             <p className="mt-2 text-sm text-gray-600">
-              Prueba otra búsqueda o cambia el filtro.
+              Prueba otra búsqueda o
+              cambia el filtro.
             </p>
           </div>
         )}
 
-      {/* Eventos */}
+      {/* =====================================
+          LISTA DE EVENTOS
+      ====================================== */}
+
       {!cargando &&
         !error &&
         eventosFiltrados.length >
           0 && (
           <>
+            {/* CANTIDAD */}
+
             <div className="mt-6 flex items-center justify-between">
               <p className="text-sm text-gray-600">
                 Mostrando{" "}
@@ -326,21 +485,31 @@ export default function Eventos() {
               </p>
             </div>
 
+            {/* TARJETAS */}
+
             <div className="mt-4 grid gap-4">
               {eventosFiltrados.map(
                 (evento) => (
                   <article
-                    key={evento.id}
+                    key={
+                      evento.id
+                    }
                     className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md sm:p-6"
                   >
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                      {/* INFORMACIÓN */}
+
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-3">
+                          {/* CÓDIGO */}
+
                           <span className="text-xs font-semibold text-[#1B396A]">
                             {
                               evento.codigo_evento
                             }
                           </span>
+
+                          {/* ESTADO */}
 
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold ${
@@ -357,11 +526,15 @@ export default function Eventos() {
                           </span>
                         </div>
 
+                        {/* NOMBRE */}
+
                         <h2 className="mt-3 text-xl font-bold text-[#1F2937]">
                           {
                             evento.nombre
                           }
                         </h2>
+
+                        {/* DESCRIPCIÓN */}
 
                         {evento.descripcion && (
                           <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
@@ -370,6 +543,8 @@ export default function Eventos() {
                             }
                           </p>
                         )}
+
+                        {/* FECHA Y HORA */}
 
                         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
                           <p>
@@ -392,7 +567,13 @@ export default function Eventos() {
                         </div>
                       </div>
 
+                      {/* =====================================
+                          ACCIONES
+                      ====================================== */}
+
                       <div className="flex flex-wrap gap-2 lg:justify-end">
+                        {/* VER EVENTO */}
+
                         <Link
                           to={`/admin/eventos/${evento.id}`}
                           className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-[#F5F5F5]"
@@ -400,15 +581,43 @@ export default function Eventos() {
                           Ver evento
                         </Link>
 
+                        {/* PASAR ASISTENCIA */}
+
                         {evento.estado ===
                           "activo" && (
                           <Link
                             to={`/admin/eventos/${evento.id}/escanear`}
                             className="rounded-xl bg-[#1B396A] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
                           >
-                            Pasar asistencia
+                            Pasar
+                            asistencia
                           </Link>
                         )}
+
+                        {/* FINALIZAR EVENTO */}
+
+                        {puedeCrearEventos &&
+                          evento.estado ===
+                            "activo" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                finalizarEvento(
+                                  evento
+                                )
+                              }
+                              disabled={
+                                eventoFinalizandoId !==
+                                null
+                              }
+                              className="rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {eventoFinalizandoId ===
+                              evento.id
+                                ? "Finalizando..."
+                                : "Finalizar evento"}
+                            </button>
+                          )}
                       </div>
                     </div>
                   </article>

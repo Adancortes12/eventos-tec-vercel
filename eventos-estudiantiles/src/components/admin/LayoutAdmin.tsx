@@ -234,7 +234,9 @@ export default function LayoutAdmin() {
               <div>
                 <h1 className="font-bold text-white">Eventos</h1>
 
-                <p className="text-sm text-slate-400">Panel de gestión del administrador</p>
+                <p className="text-sm text-slate-400">
+                  Panel de gestión del administrador
+                </p>
               </div>
             </div>
           </div>
@@ -289,6 +291,14 @@ export default function LayoutAdmin() {
               onClick={() => setMenuAbierto(false)}
             >
               Eventos
+            </NavLink>
+            {/* Participación generar reportes */}
+            <NavLink
+              to="/admin/participacion"
+              className={enlaceClase}
+              onClick={() => setMenuAbierto(false)}
+            >
+              Participación 
             </NavLink>
 
             {/* Maestros y administradores */}

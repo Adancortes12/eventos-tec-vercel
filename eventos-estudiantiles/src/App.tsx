@@ -9,6 +9,7 @@ import Eventos from "./pages/admin/Eventos";
 import DetalleEvento from "./pages/admin/DetalleEvento";
 import EscanerQR from "./pages/admin/EscanerQR";
 import Maestros from "./pages/admin/Maestros";
+import Participacion from "./pages/admin/Participacion";
 
 import EventosDisponibles from "./pages/public/EventosDisponibles";
 import RegistroEvento from "./pages/public/RegistroEvento";
@@ -36,6 +37,7 @@ function App() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route path="/admin/participacion" element={<Participacion />} />
 
           <Route path="eventos" element={<Eventos />} />
 

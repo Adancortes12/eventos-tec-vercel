@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   Link,
@@ -9,6 +9,8 @@ import {
 
 import ModalEditarEvento from "../../components/admin/ModalEditarEvento";
 import ModalQrEvento from "../../components/admin/ModalQrEvento";
+import { descargarExcel, fechaHoraParaExcel, fechaParaExcel } from "../../lib/exportarExcel";
+import type { ReporteExcel } from "../../lib/exportarExcel";
 
 type Evento = {
   id: string;
@@ -208,6 +210,49 @@ function generarNombreArchivoReporte(
   return `Reporte_${codigoEvento}_General`;
 }
 
+function contenidoExcelEvento(datos: DatosReporte): ReporteExcel {
+  return {
+    titulo: "Reporte de asistencia por evento",
+    nombreArchivo: generarNombreArchivoReporte(datos),
+    resumen: [
+      { etiqueta: "Código del evento", valor: datos.evento.codigo_evento },
+      { etiqueta: "Evento", valor: datos.evento.nombre },
+      { etiqueta: "Fecha del evento", valor: fechaParaExcel(datos.evento.fecha_evento), formato: "dd/mm/yyyy" },
+      { etiqueta: "Hora del evento", valor: datos.evento.hora_evento },
+      { etiqueta: "Estado", valor: datos.evento.estado },
+      { etiqueta: "Tipo de reporte", valor: datos.filtro.tipo === "carrera" ? "Por carrera" : "General" },
+      { etiqueta: "Carrera", valor: datos.filtro.carrera ?? "Todas las carreras" },
+      { etiqueta: "Registros", valor: datos.resumen.numeroRegistros, formato: "#,##0" },
+      { etiqueta: "Asistencias de hombres", valor: datos.resumen.asistenciasHombres, formato: "#,##0" },
+      { etiqueta: "Asistencias de mujeres", valor: datos.resumen.asistenciasMujeres, formato: "#,##0" },
+      { etiqueta: "Asistencias totales", valor: datos.resumen.asistenciasTotal, formato: "#,##0" },
+      { etiqueta: "Faltantes", valor: datos.resumen.faltantes, formato: "#,##0" },
+      { etiqueta: "Porcentaje de asistencia", valor: datos.resumen.porcentajeAsistencia / 100, formato: "0.0%" },
+      { etiqueta: "Datos institucionales pendientes", valor: datos.datosSitec.pendientes, formato: "#,##0" },
+      { etiqueta: "Zona horaria de asistencia", valor: "Ciudad de México (America/Mexico_City)" },
+    ],
+    hojas: [{
+      nombre: "Asistencia",
+      columnas: [
+        { titulo: "Número de cuenta", ancho: 22, formato: "@" },
+        { titulo: "Nombre", ancho: 44, formato: "@" },
+        { titulo: "Género", ancho: 15, formato: "@" },
+        { titulo: "Carrera", ancho: 48, formato: "@" },
+        { titulo: "Asistió", ancho: 14, formato: "@" },
+        { titulo: "Fecha de asistencia (CDMX)", ancho: 25, formato: "dd/mm/yyyy" },
+        { titulo: "Hora de asistencia (CDMX)", ancho: 25, formato: "hh:mm:ss" },
+      ],
+      filas: datos.estudiantes.map((alumno) => {
+        const asistencia = alumno.asistio ? fechaHoraParaExcel(alumno.horaAsistencia) : null;
+        return [
+          alumno.numeroCuenta, alumno.nombre, alumno.genero ?? "Sin dato", alumno.carrera ?? "Sin dato",
+          alumno.asistio ? "Sí" : "No", asistencia, asistencia,
+        ];
+      }),
+    }],
+  };
+}
+
 export default function DetalleEvento() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -257,11 +302,20 @@ export default function DetalleEvento() {
   const [actualizandoSitec, setActualizandoSitec] =
     useState(false);
 
+  const [exportandoExcel, setExportandoExcel] = useState(false);
+  const consultaExcel = useRef<AbortController | null>(null);
+
   const [errorReporte, setErrorReporte] =
     useState("");
 
   const [mensajeReporte, setMensajeReporte] =
     useState("");
+
+  useEffect(() => {
+  return () => {
+    consultaExcel.current?.abort();
+  };
+}, [id]);
 
   useEffect(() => {
     if (!id) {
@@ -618,7 +672,7 @@ export default function DetalleEvento() {
   };
 
   const imprimirReporte = () => {
-    if (!reporte) {
+    if (!reporte || cargandoReporte || actualizandoSitec || exportandoExcel) {
       return;
     }
 
@@ -640,6 +694,29 @@ export default function DetalleEvento() {
     });
 
     window.print();
+  };
+
+  const descargarReporteExcel = async () => {
+    if (!reporte || reporte.evento.id !== id || cargandoReporte || actualizandoSitec || exportandoExcel) return;
+    const controlador = new AbortController();
+    consultaExcel.current = controlador;
+    setExportandoExcel(true);
+    setErrorReporte("");
+    setMensajeReporte("");
+    try {
+      if (reporte.estudiantes.length !== reporte.resumen.numeroRegistros) {
+        throw new Error("El reporte no contiene todos los registros. Genera de nuevo el reporte antes de descargar el Excel.");
+      }
+      // Exporta el resultado generado, incluido su filtro de carrera, sin consultar SITEc.
+      await descargarExcel(contenidoExcelEvento(reporte), controlador.signal);
+      if (!controlador.signal.aborted) setMensajeReporte("Archivo Excel preparado correctamente.");
+    } catch (errorConsulta) {
+      if (!controlador.signal.aborted) {
+        setErrorReporte(errorConsulta instanceof Error ? errorConsulta.message : "No se pudo descargar el Excel.");
+      }
+    } finally {
+      if (consultaExcel.current === controlador && !controlador.signal.aborted) setExportandoExcel(false);
+    }
   };
 
   if (!id) {
@@ -1012,6 +1089,7 @@ export default function DetalleEvento() {
                       "general",
                     )
                   }
+                  disabled={exportandoExcel}
                   className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
                     tipoReporte ===
                     "general"
@@ -1029,6 +1107,7 @@ export default function DetalleEvento() {
                       "carrera",
                     )
                   }
+                  disabled={exportandoExcel}
                   className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
                     tipoReporte ===
                     "carrera"
@@ -1062,6 +1141,7 @@ export default function DetalleEvento() {
                   "carrera" ||
                   cargandoReporte ||
                   actualizandoSitec ||
+                  exportandoExcel ||
                   cargandoCarreras
                 }
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#1B396A] focus:ring-2 focus:ring-[#1B396A]/10 disabled:cursor-not-allowed disabled:bg-gray-100"
@@ -1098,6 +1178,7 @@ export default function DetalleEvento() {
                 disabled={
                   cargandoReporte ||
                   actualizandoSitec ||
+                  exportandoExcel ||
                   (tipoReporte ===
                     "carrera" &&
                     !carreraReporte)
@@ -1131,6 +1212,7 @@ export default function DetalleEvento() {
               disabled={
                 cargandoReporte ||
                 actualizandoSitec ||
+                exportandoExcel ||
                 (tipoReporte ===
                   "carrera" &&
                   !carreraReporte)
@@ -1244,13 +1326,22 @@ export default function DetalleEvento() {
                 </div>
               </div>
 
-              <div className="no-print flex items-end justify-start sm:justify-end">
+              <div className="no-print flex flex-wrap items-end justify-start gap-2 sm:justify-end">
                 <button
                   type="button"
                   onClick={imprimirReporte}
-                  className="no-print rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                  disabled={cargandoReporte || actualizandoSitec || exportandoExcel}
+                  className="no-print rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Imprimir / Guardar PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void descargarReporteExcel()}
+                  disabled={cargandoReporte || actualizandoSitec || exportandoExcel}
+                  className="no-print rounded-lg border border-[#1B396A]/30 px-4 py-2.5 text-sm font-semibold text-[#1B396A] transition hover:bg-[#EEF2F7] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {exportandoExcel ? "Preparando Excel…" : "Descargar Excel"}
                 </button>
               </div>
             </div>

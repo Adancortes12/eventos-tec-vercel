@@ -303,7 +303,7 @@ export default function Dashboard() {
       <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>
-            <h2 className="text-xl font-bold text-[#1F2937]">
+            <h2 id="eventos-recientes" className="text-xl font-bold text-[#1F2937]">
               Eventos recientes
             </h2>
 
