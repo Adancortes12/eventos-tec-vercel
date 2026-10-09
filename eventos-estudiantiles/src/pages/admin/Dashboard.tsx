@@ -4,8 +4,6 @@ import {
   useOutletContext,
 } from "react-router";
 
-import { supabase } from "../../lib/supabase";
-
 type Evento = {
   id: string;
   codigo_evento: string;
@@ -44,112 +42,77 @@ export default function Dashboard() {
   const [error, setError] =
     useState("");
 
-  useEffect(() => {
-    const cargarDashboard = async () => {
+ useEffect(() => {
+  const cargarDashboard =
+    async () => {
       setCargando(true);
       setError("");
 
-      const [
-        eventosRespuesta,
-        activosRespuesta,
-        registradosRespuesta,
-        asistenciasRespuesta,
-        recientesRespuesta,
-      ] = await Promise.all([
-        supabase
-          .from("eventos")
-          .select("*", {
-            count: "exact",
-            head: true,
-          }),
+      try {
+        const respuesta =
+          await fetch(
+            "/api/admin/dashboard",
+            {
+              method: "GET",
+              credentials:
+                "include",
+            }
+          );
 
-        supabase
-          .from("eventos")
-          .select("*", {
-            count: "exact",
-            head: true,
-          })
-          .eq("estado", "activo"),
+        const datos =
+          await respuesta.json();
 
-        supabase
-          .from("inscripciones")
-          .select("*", {
-            count: "exact",
-            head: true,
-          }),
+        if (!respuesta.ok) {
+          throw new Error(
+            datos.error ??
+              "No se pudo cargar el dashboard."
+          );
+        }
 
-        supabase
-          .from("inscripciones")
-          .select("*", {
-            count: "exact",
-            head: true,
-          })
-          .eq("asistio", true),
-
-        supabase
-          .from("eventos")
-          .select(`
-            id,
-            codigo_evento,
-            nombre,
-            fecha_evento,
-            hora_evento,
-            estado
-          `)
-          .order("creado_en", {
-            ascending: false,
-          })
-          .limit(5),
-      ]);
-
-      if (
-        eventosRespuesta.error ||
-        activosRespuesta.error ||
-        registradosRespuesta.error ||
-        asistenciasRespuesta.error ||
-        recientesRespuesta.error
-      ) {
-        console.error({
-          eventosRespuesta,
-          activosRespuesta,
-          registradosRespuesta,
-          asistenciasRespuesta,
-          recientesRespuesta,
-        });
-
-        setError(
-          "No se pudo cargar la información del dashboard."
+        setTotalEventos(
+          datos.totalEventos ??
+            0
         );
 
+        setEventosActivos(
+          datos.eventosActivos ??
+            0
+        );
+
+        setTotalRegistrados(
+          datos.totalRegistrados ??
+            0
+        );
+
+        setTotalAsistencias(
+          datos.totalAsistencias ??
+            0
+        );
+
+        setEventosRecientes(
+          datos.eventosRecientes ??
+            []
+        );
+      } catch (
+        errorConsulta
+      ) {
+        console.error(
+          errorConsulta
+        );
+
+        setError(
+          errorConsulta instanceof
+            Error
+            ? errorConsulta.message
+            : "No se pudo cargar el dashboard."
+        );
+      } finally {
         setCargando(false);
-        return;
       }
-
-      setTotalEventos(
-        eventosRespuesta.count ?? 0
-      );
-
-      setEventosActivos(
-        activosRespuesta.count ?? 0
-      );
-
-      setTotalRegistrados(
-        registradosRespuesta.count ?? 0
-      );
-
-      setTotalAsistencias(
-        asistenciasRespuesta.count ?? 0
-      );
-
-      setEventosRecientes(
-        recientesRespuesta.data ?? []
-      );
-
-      setCargando(false);
     };
 
-    cargarDashboard();
-  }, []);
+  void cargarDashboard();
+}, []);
 
   const porcentajeGeneral =
     totalRegistrados > 0

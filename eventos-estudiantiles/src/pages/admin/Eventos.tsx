@@ -5,8 +5,6 @@ import {
   useOutletContext,
 } from "react-router";
 
-import { supabase } from "../../lib/supabase";
-
 type Evento = {
   id: string;
   codigo_evento: string;
@@ -69,38 +67,57 @@ export default function Eventos() {
    * CARGAR EVENTOS
    * =====================================
    */
-  useEffect(() => {
-    const cargarEventos = async () => {
+ useEffect(() => {
+  const cargarEventos =
+    async () => {
       setCargando(true);
       setError("");
 
-      const {
-        data,
-        error: errorConsulta,
-      } = await supabase
-        .from("eventos")
-        .select("*")
-        .order("fecha_evento", {
-          ascending: true,
-        });
+      try {
+        const respuesta =
+          await fetch(
+            "/api/eventos/listar",
+            {
+              method: "GET",
+              credentials:
+                "include",
+            }
+          );
 
-      if (errorConsulta) {
-        console.error(errorConsulta);
+        const datos =
+          await respuesta.json();
 
-        setError(
-          "No se pudieron cargar los eventos."
+        if (!respuesta.ok) {
+          throw new Error(
+            datos.error ??
+              "No se pudieron cargar los eventos."
+          );
+        }
+
+        setEventos(
+          datos.eventos ??
+            []
+        );
+      } catch (
+        errorConsulta
+      ) {
+        console.error(
+          errorConsulta
         );
 
+        setError(
+          errorConsulta instanceof
+            Error
+            ? errorConsulta.message
+            : "No se pudieron cargar los eventos."
+        );
+      } finally {
         setCargando(false);
-        return;
       }
-
-      setEventos(data ?? []);
-      setCargando(false);
     };
 
-    cargarEventos();
-  }, []);
+  void cargarEventos();
+}, []);
 
   /*
    * =====================================
