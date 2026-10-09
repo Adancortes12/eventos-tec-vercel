@@ -13,9 +13,6 @@ import {
   Link,
 } from "react-router";
 
-import {
-  supabase,
-} from "../../lib/supabase";
 
 import {
   descargarExcel,
@@ -1196,111 +1193,86 @@ export default function Participacion() {
    * ===================================================
    */
 
-  useEffect(() => {
-    let activo = true;
+useEffect(() => {
+  let activo = true;
 
-    async function cargarEventos() {
-      try {
-        setCargandoEventos(
-          true
+  async function cargarEventos() {
+    try {
+      setCargandoEventos(true);
+      setErrorEventos("");
+
+      const respuesta = await fetch(
+        "/api/eventos/listar",
+        {
+          method: "GET",
+          credentials: "include",
+        }
+      );
+
+      const datos = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(
+          datos.error ??
+            "No se pudieron cargar los eventos."
         );
+      }
 
-        setErrorEventos(
-          ""
-        );
+      if (!activo) {
+        return;
+      }
 
-        const resultados:
-          Evento[] = [];
+      const eventosOrdenados =
+        (datos.eventos ?? [])
+          .sort(
+            (
+              a: Evento,
+              b: Evento
+            ) => {
+              const fechaA =
+                `${a.fecha_evento} ${a.hora_evento ?? ""}`;
 
-        let inicio = 0;
+              const fechaB =
+                `${b.fecha_evento} ${b.hora_evento ?? ""}`;
 
-        while (true) {
-          const {
-            data,
-            error:
-              errorConsulta,
-          } = await supabase
-            .from("eventos")
-            .select(
-              "id,codigo_evento,nombre,fecha_evento,hora_evento,estado"
-            )
-            .order(
-              "fecha_evento",
-              {
-                ascending:
-                  false,
-              }
-            )
-            .order(
-              "hora_evento",
-              {
-                ascending:
-                  false,
-              }
-            )
-            .range(
-              inicio,
-              inicio + 999
-            );
-
-          if (!activo) {
-            return;
-          }
-
-          if (
-            errorConsulta
-          ) {
-            throw errorConsulta;
-          }
-
-          const bloque =
-            (data ??
-              []) as Evento[];
-
-          resultados.push(
-            ...bloque
+              return fechaB.localeCompare(
+                fechaA
+              );
+            }
           );
 
-          if (
-            bloque.length <
-            1000
-          ) {
-            break;
-          }
-
-          inicio += 1000;
-        }
-
-        setEventos(
-          resultados
-        );
-      } catch (
-        errorConsulta
-      ) {
+      setEventos(
+        eventosOrdenados
+      );
+    } catch (
+      errorConsulta
+    ) {
+      if (activo) {
         console.error(
           errorConsulta
         );
 
-        if (activo) {
-          setErrorEventos(
-            "No se pudieron cargar los eventos."
-          );
-        }
-      } finally {
-        if (activo) {
-          setCargandoEventos(
-            false
-          );
-        }
+        setErrorEventos(
+          errorConsulta instanceof Error
+            ? errorConsulta.message
+            : "No se pudieron cargar los eventos. Recarga la página para intentarlo de nuevo."
+        );
+      }
+    } finally {
+      if (activo) {
+        setCargandoEventos(
+          false
+        );
       }
     }
+  }
 
-    void cargarEventos();
+  void cargarEventos();
 
-    return () => {
-      activo = false;
-    };
-  }, []);
+  return () => {
+    activo = false;
+  };
+}, []);
 
   /*
    * CANCELAR SOLICITUDES
@@ -2677,156 +2649,206 @@ export default function Participacion() {
       {/* MODAL */}
 
       <dialog
-        ref={
-          dialogo
-        }
-        onCancel={(
-          e
-        ) => {
-          e.preventDefault();
+  ref={dialogo}
+  aria-labelledby="titulo-alumno"
+  className="m-auto max-h-[90vh] w-[calc(100%_-_2rem)] max-w-5xl overflow-y-auto rounded-2xl border-0 !bg-white p-0 !text-slate-900 shadow-xl backdrop:bg-slate-900/50"
+  onCancel={(e) => {
+    e.preventDefault();
+    cerrarDetalle();
+  }}
+  onClick={(e) => {
+    if (e.target === e.currentTarget) {
+      cerrarDetalle();
+    }
+  }}
+>
+  {alumnoModal && (
+    <>
+      {/* ENCABEZADO */}
 
-          cerrarDetalle();
-        }}
-        className="m-auto max-h-[90vh] w-[calc(100%_-_2rem)] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-white p-0 shadow-xl backdrop:bg-slate-900/50"
-      >
-        {alumnoModal && (
-          <>
-            <div className="flex justify-between gap-4 border-b p-5">
-              <div>
-                <p className="text-sm font-semibold text-[#1B396A]">
-                  Detalle de participación
-                </p>
+      <div className="flex items-start justify-between gap-4 border-b border-slate-200 !bg-white p-5 sm:p-6">
+        <div>
+          <p className="text-sm font-semibold !text-[#1B396A]">
+            Detalle de participación
+          </p>
 
-                <h2 className="text-xl font-bold">
-                  {
-                    alumnoModal.nombre
-                  }
-                </h2>
+          <h2
+            id="titulo-alumno"
+            className="mt-1 text-xl font-bold !text-slate-900"
+          >
+            {alumnoModal.nombre}
+          </h2>
 
-                <p className="text-sm text-slate-500">
-                  {
-                    alumnoModal.numeroCuenta
-                  }{" "}
-                  ·{" "}
-                  {alumnoModal.carrera ??
-                    "Sin carrera"}
-                </p>
-              </div>
+          <p className="mt-2 text-sm !text-slate-600">
+            {alumnoModal.numeroCuenta} ·{" "}
+            {alumnoModal.carrera ?? "Sin carrera"}
+          </p>
 
-              <button
-                type="button"
-                onClick={
-                  cerrarDetalle
-                }
-                className={
-                  CLASE_BOTON
-                }
-              >
-                Cerrar
-              </button>
-            </div>
-
-            {cargandoDetalle && (
-              <p className="p-6">
-                Cargando...
-              </p>
+          <p className="mt-2 text-sm font-semibold !text-[#1B396A]">
+            {alumnoModal.totalAsistio} asistidos /{" "}
+            {alumnoModal.totalInscribio} inscritos ·{" "}
+            {formatearPorcentaje(
+              alumnoModal.porcentaje
             )}
+          </p>
+        </div>
 
-            {errorDetalle && (
-              <p className="p-6 text-red-600">
-                {
-                  errorDetalle
-                }
-              </p>
-            )}
+        <button
+          type="button"
+          onClick={cerrarDetalle}
+          className="rounded-xl border border-slate-300 !bg-white px-4 py-2.5 text-sm font-semibold !text-slate-700 transition hover:!bg-slate-100"
+        >
+          Cerrar
+        </button>
+      </div>
 
-            {detalle && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-5 py-4">
-                        Evento
-                      </th>
+      {/* CARGANDO */}
 
-                      <th className="px-5 py-4">
-                        Fecha
-                      </th>
+      {cargandoDetalle && (
+        <p
+          role="status"
+          className="p-6 text-sm !text-slate-600"
+        >
+          Cargando eventos del alumno…
+        </p>
+      )}
 
-                      <th className="px-5 py-4">
-                        Inscrito
-                      </th>
+      {/* ERROR */}
 
-                      <th className="px-5 py-4">
-                        Asistió
-                      </th>
+      {errorDetalle && (
+        <div
+          role="alert"
+          className="m-5 rounded-xl border border-red-200 !bg-red-50 p-4 text-sm !text-red-700"
+        >
+          {errorDetalle}
 
-                      <th className="px-5 py-4">
-                        Hora
-                      </th>
-                    </tr>
-                  </thead>
+          <button
+            type="button"
+            className="ml-3 font-semibold underline !text-red-700"
+            onClick={() =>
+              void abrirDetalle(alumnoModal)
+            }
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
-                  <tbody>
-                    {detalle.eventos.map(
-                      (
-                        evento
-                      ) => (
-                        <tr
-                          key={
-                            evento.eventoId
-                          }
-                          className="border-t"
-                        >
-                          <td className="px-5 py-4">
-                            <strong className="text-[#1B396A]">
-                              {
-                                evento.codigoEvento
-                              }
-                            </strong>
+      {/* TABLA */}
 
-                            <br />
+      {detalle && (
+        <div className="overflow-x-auto !bg-white">
+          <table className="min-w-full text-left text-sm !text-slate-900">
+            <thead className="!bg-[#EEF2F7] text-xs uppercase">
+              <tr>
+                <th className="px-5 py-4 font-semibold !text-[#1B396A]">
+                  Evento
+                </th>
 
-                            {
-                              evento.nombreEvento
-                            }
-                          </td>
+                <th className="px-5 py-4 font-semibold !text-[#1B396A]">
+                  Fecha
+                </th>
 
-                          <td className="px-5 py-4">
-                            {formatearFecha(
-                              evento.fechaEvento
-                            )}
-                          </td>
+                <th className="px-5 py-4 font-semibold !text-[#1B396A]">
+                  Inscrito
+                </th>
 
-                          <td className="px-5 py-4">
-                            {evento.inscrito
-                              ? "Sí"
-                              : "No"}
-                          </td>
+                <th className="px-5 py-4 font-semibold !text-[#1B396A]">
+                  Asistió
+                </th>
 
-                          <td className="px-5 py-4">
-                            {evento.asistio
-                              ? "Sí"
-                              : "No"}
-                          </td>
+                <th className="px-5 py-4 font-semibold !text-[#1B396A]">
+                  Hora
+                </th>
+              </tr>
+            </thead>
 
-                          <td className="px-5 py-4">
-                            {evento.asistio
-                              ? formatearFechaHora(
-                                  evento.horaAsistencia
-                                )
-                              : "—"}
-                          </td>
-                        </tr>
-                      )
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-      </dialog>
+            <tbody className="divide-y divide-slate-200 !bg-white">
+              {detalle.eventos.map(
+                (evento) => (
+                  <tr
+                    key={evento.eventoId}
+                    className="!bg-white hover:!bg-slate-50"
+                  >
+                    {/* EVENTO */}
+
+                    <td className="px-5 py-4">
+                      <span className="block text-xs font-semibold !text-[#1B396A]">
+                        {evento.codigoEvento}
+                      </span>
+
+                      <span className="mt-1 block font-medium !text-slate-900">
+                        {evento.nombreEvento}
+                      </span>
+                    </td>
+
+                    {/* FECHA */}
+
+                    <td className="whitespace-nowrap px-5 py-4 !text-slate-700">
+                      {formatearFecha(
+                        evento.fechaEvento
+                      )}
+                    </td>
+
+                    {/* INSCRITO */}
+
+                    <td className="px-5 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                          evento.inscrito
+                            ? "!bg-blue-100 !text-[#1B396A]"
+                            : "!bg-slate-200 !text-slate-700"
+                        }`}
+                      >
+                        {evento.inscrito
+                          ? "Sí"
+                          : "No"}
+                      </span>
+                    </td>
+
+                    {/* ASISTENCIA */}
+
+                    <td className="px-5 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                          evento.asistio
+                            ? "!bg-green-100 !text-green-700"
+                            : "!bg-red-100 !text-red-700"
+                        }`}
+                      >
+                        {evento.asistio
+                          ? "Sí"
+                          : "No"}
+                      </span>
+                    </td>
+
+                    {/* HORA */}
+
+                    <td className="whitespace-nowrap px-5 py-4 !text-slate-700">
+                      {evento.asistio
+                        ? formatearFechaHora(
+                            evento.horaAsistencia
+                          )
+                        : "—"}
+                    </td>
+                  </tr>
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* NOTA */}
+
+      <p className="border-t border-slate-200 !bg-white p-5 text-xs leading-5 !text-slate-600">
+        Se muestran todos los eventos seleccionados.
+        Los eventos sin inscripción no forman parte
+        del denominador del porcentaje.
+      </p>
+    </>
+  )}
+</dialog>
     </div>
   );
 }

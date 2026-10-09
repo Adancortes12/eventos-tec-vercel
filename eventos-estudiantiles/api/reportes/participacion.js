@@ -4,6 +4,12 @@ import {
   verificarSesion,
 } from "../../server/lib/session.js";
 
+/*
+ * =====================================================
+ * CONFIGURACIÓN
+ * =====================================================
+ */
+
 const TAMANO_BLOQUE = 1000;
 const EVENTOS_POR_BLOQUE = 100;
 
@@ -31,16 +37,6 @@ function normalizarTexto(valor) {
     .trim();
 }
 
-/*
- * SITEc puede guardar las carreras con pequeñas
- * diferencias:
- *
- * INGENIERÍA EN SISTEMAS COMPUTACIONALES
- * INGENIERIA EN SISTEMAS COMPUTACIONALES
- * ISC
- *
- * Aquí todas terminan con un mismo nombre.
- */
 function normalizarCarrera(valor) {
   const texto = normalizarTexto(valor);
 
@@ -63,15 +59,11 @@ function normalizarCarrera(valor) {
     return "CONTADOR PUBLICO";
   }
 
-  if (
-    texto.includes("ambiental")
-  ) {
+  if (texto.includes("ambiental")) {
     return "INGENIERIA AMBIENTAL";
   }
 
-  if (
-    texto.includes("bioquim")
-  ) {
+  if (texto.includes("bioquim")) {
     return "INGENIERIA BIOQUIMICA";
   }
 
@@ -105,9 +97,7 @@ function normalizarCarrera(valor) {
     return "INGENIERIA EN SISTEMAS COMPUTACIONALES";
   }
 
-  if (
-    texto.includes("industrial")
-  ) {
+  if (texto.includes("industrial")) {
     return "INGENIERIA INDUSTRIAL";
   }
 
@@ -118,40 +108,41 @@ function normalizarCarrera(valor) {
     return "INGENIERIA INFORMATICA";
   }
 
-  if (
-    texto.includes("mecatron")
-  ) {
+  if (texto.includes("mecatron")) {
     return "INGENIERIA MECATRONICA";
   }
 
-  if (
-    texto.includes("administracion")
-  ) {
+  if (texto.includes("administracion")) {
     return "LICENCIATURA EN ADMINISTRACION";
   }
 
   /*
-   * Si SITEc trae una carrera nueva que todavía
-   * no conocemos, no la eliminamos.
+   * Si aparece una carrera nueva,
+   * no la descartamos.
    */
   return texto.toUpperCase();
 }
 
 function normalizarGenero(valor) {
-  const genero = normalizarTexto(valor);
+  const genero =
+    normalizarTexto(valor);
 
   if (
-    ["1", "hombre", "masculino"].includes(
-      genero
-    )
+    [
+      "1",
+      "hombre",
+      "masculino",
+    ].includes(genero)
   ) {
     return "Hombre";
   }
 
   if (
-    ["2", "mujer", "femenino"].includes(
-      genero
-    )
+    [
+      "2",
+      "mujer",
+      "femenino",
+    ].includes(genero)
   ) {
     return "Mujer";
   }
@@ -170,20 +161,25 @@ function obtenerEventoIds(req) {
     req.query?.eventoIds ??
     req.query?.eventos;
 
-  const valores = Array.isArray(parametro)
-    ? parametro
-    : typeof parametro === "string"
-      ? [parametro]
-      : [];
+  const valores =
+    Array.isArray(parametro)
+      ? parametro
+      : typeof parametro === "string"
+        ? [parametro]
+        : [];
 
   return [
     ...new Set(
       valores
-        .flatMap((valor) =>
-          String(valor).split(",")
+        .flatMap(
+          (valor) =>
+            String(valor).split(",")
         )
-        .map((valor) =>
-          valor.trim().toLowerCase()
+        .map(
+          (valor) =>
+            valor
+              .trim()
+              .toLowerCase()
         )
         .filter(Boolean)
     ),
@@ -206,11 +202,14 @@ function obtenerEntero(
     return null;
   }
 
-  if (String(valor).trim() === "") {
+  if (
+    String(valor).trim() === ""
+  ) {
     return null;
   }
 
-  const numero = Number(valor);
+  const numero =
+    Number(valor);
 
   if (
     !Number.isSafeInteger(numero) ||
@@ -231,52 +230,83 @@ function obtenerEntero(
  * =====================================================
  */
 
-async function obtenerEventos(eventoIds) {
-  const resultados = [];
+async function obtenerEventos(
+  eventoIds
+) {
+  const consultas = [];
 
   for (
     let inicio = 0;
     inicio < eventoIds.length;
     inicio += EVENTOS_POR_BLOQUE
   ) {
-    const {
-      data,
-      error,
-    } = await supabaseAdmin
-      .from("eventos")
-      .select(
-        "id,codigo_evento,nombre,fecha_evento,hora_evento,estado"
-      )
-      .in(
-        "id",
-        eventoIds.slice(
-          inicio,
-          inicio +
-            EVENTOS_POR_BLOQUE
-        )
+    const bloque =
+      eventoIds.slice(
+        inicio,
+        inicio +
+          EVENTOS_POR_BLOQUE
       );
 
-    if (error) {
-      throw error;
-    }
-
-    resultados.push(
-      ...(data ?? [])
+    consultas.push(
+      supabaseAdmin
+        .from("eventos")
+        .select(`
+          id,
+          codigo_evento,
+          nombre,
+          fecha_evento,
+          hora_evento,
+          estado
+        `)
+        .in(
+          "id",
+          bloque
+        )
     );
   }
 
-  const porId = new Map(
-    resultados.map(
-      (evento) => [
-        evento.id,
-        evento,
-      ]
-    )
-  );
+  /*
+   * Los bloques pueden ejecutarse
+   * al mismo tiempo.
+   */
+  const respuestas =
+    await Promise.all(
+      consultas
+    );
+
+  const resultados = [];
+
+  for (
+    const respuesta of respuestas
+  ) {
+    if (respuesta.error) {
+      throw respuesta.error;
+    }
+
+    resultados.push(
+      ...(respuesta.data ?? [])
+    );
+  }
+
+  /*
+   * Conservamos exactamente
+   * el orden recibido desde
+   * eventoIds.
+   */
+  const porId =
+    new Map(
+      resultados.map(
+        (evento) => [
+          evento.id,
+          evento,
+        ]
+      )
+    );
 
   return eventoIds
-    .map((id) =>
-      porId.get(id)
+    .map(
+      (id) =>
+        porId.get(id)
     )
     .filter(Boolean);
 }
@@ -287,35 +317,26 @@ async function obtenerEventos(eventoIds) {
  * =====================================================
  */
 
-async function obtenerInscripciones(
-  eventoIds
+/*
+ * Consulta un bloque de eventos.
+ *
+ * Si numeroCuenta viene definido,
+ * Supabase filtra desde la BD y no
+ * descargamos alumnos innecesarios.
+ */
+async function obtenerBloqueInscripciones(
+  bloqueEventos,
+  numeroCuenta = null
 ) {
   const resultados = [];
 
-  for (
-    let inicioEventos = 0;
-    inicioEventos <
-    eventoIds.length;
-    inicioEventos +=
-      EVENTOS_POR_BLOQUE
-  ) {
-    const bloqueEventos =
-      eventoIds.slice(
-        inicioEventos,
-        inicioEventos +
-          EVENTOS_POR_BLOQUE
-      );
+  let inicio = 0;
 
-    let inicio = 0;
-
-    while (true) {
-      const {
-        data,
-        error,
-      } = await supabaseAdmin
+  while (true) {
+    let consulta =
+      supabaseAdmin
         .from("inscripciones")
-        .select(
-          `
+        .select(`
           id,
           evento_id,
           numero_estudiante,
@@ -325,21 +346,42 @@ async function obtenerInscripciones(
           registrado_en,
           asistio,
           asistio_en
-          `
-        )
+        `)
         .in(
           "evento_id",
           bloqueEventos
-        )
+        );
+
+    /*
+     * Esta es la mejora principal
+     * para abrir el detalle de
+     * un alumno.
+     */
+    if (numeroCuenta) {
+      consulta =
+        consulta.eq(
+          "numero_estudiante",
+          numeroCuenta
+        );
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await consulta
         .order(
           "registrado_en",
           {
             ascending: true,
           }
         )
-        .order("id", {
-          ascending: true,
-        })
+        .order(
+          "id",
+          {
+            ascending: true,
+          }
+        )
         .range(
           inicio,
           inicio +
@@ -347,31 +389,118 @@ async function obtenerInscripciones(
             1
         );
 
-      if (error) {
-        throw error;
-      }
-
-      const registros =
-        data ?? [];
-
-      resultados.push(
-        ...registros
-      );
-
-      if (
-        registros.length <
-        TAMANO_BLOQUE
-      ) {
-        break;
-      }
-
-      inicio +=
-        TAMANO_BLOQUE;
+    if (error) {
+      throw error;
     }
+
+    const registros =
+      data ?? [];
+
+    resultados.push(
+      ...registros
+    );
+
+    if (
+      registros.length <
+      TAMANO_BLOQUE
+    ) {
+      break;
+    }
+
+    inicio +=
+      TAMANO_BLOQUE;
   }
 
   return resultados;
 }
+
+/*
+ * Reporte general.
+ *
+ * Aquí sí necesitamos las
+ * inscripciones de todos.
+ */
+async function obtenerInscripciones(
+  eventoIds
+) {
+  const consultas = [];
+
+  for (
+    let inicio = 0;
+    inicio < eventoIds.length;
+    inicio += EVENTOS_POR_BLOQUE
+  ) {
+    const bloque =
+      eventoIds.slice(
+        inicio,
+        inicio +
+          EVENTOS_POR_BLOQUE
+      );
+
+    consultas.push(
+      obtenerBloqueInscripciones(
+        bloque
+      )
+    );
+  }
+
+  /*
+   * Cada bloque puede consultarse
+   * al mismo tiempo.
+   */
+  const bloques =
+    await Promise.all(
+      consultas
+    );
+
+  return bloques.flat();
+}
+
+/*
+ * Detalle individual.
+ *
+ * Solo descarga las filas del
+ * número de cuenta seleccionado.
+ */
+async function obtenerInscripcionesAlumno(
+  eventoIds,
+  numeroCuenta
+) {
+  const consultas = [];
+
+  for (
+    let inicio = 0;
+    inicio < eventoIds.length;
+    inicio += EVENTOS_POR_BLOQUE
+  ) {
+    const bloque =
+      eventoIds.slice(
+        inicio,
+        inicio +
+          EVENTOS_POR_BLOQUE
+      );
+
+    consultas.push(
+      obtenerBloqueInscripciones(
+        bloque,
+        numeroCuenta
+      )
+    );
+  }
+
+  const bloques =
+    await Promise.all(
+      consultas
+    );
+
+  return bloques.flat();
+}
+
+/*
+ * =====================================================
+ * UTILIDADES
+ * =====================================================
+ */
 
 function instante(valor) {
   const numero =
@@ -395,12 +524,16 @@ function instante(valor) {
 function agruparEstudiantes(
   inscripciones
 ) {
-  const mapa = new Map();
+  const mapa =
+    new Map();
 
   /*
-   * Se ordenan para que nombre,
-   * carrera y género conserven
-   * el dato más reciente.
+   * Conservamos el comportamiento
+   * anterior:
+   *
+   * el dato no vacío más reciente
+   * de nombre, carrera y género
+   * tiene prioridad.
    */
   const ordenadas = [
     ...inscripciones,
@@ -412,7 +545,9 @@ function agruparEstudiantes(
         instante(
           b.registrado_en
         ) ||
-      String(a.id).localeCompare(
+      String(
+        a.id
+      ).localeCompare(
         String(b.id)
       )
   );
@@ -420,33 +555,50 @@ function agruparEstudiantes(
   for (
     const inscripcion of ordenadas
   ) {
-    const numero = String(
-      inscripcion.numero_estudiante ??
-        ""
-    ).trim();
+    const numero =
+      String(
+        inscripcion
+          .numero_estudiante ??
+          ""
+      ).trim();
 
     if (!numero) {
       continue;
     }
 
-    if (!mapa.has(numero)) {
-      mapa.set(numero, {
-        numeroCuenta: numero,
-        nombre: "Sin nombre",
-        carrera: null,
-        genero: null,
-        registrosPorEvento:
-          new Map(),
-      });
+    if (
+      !mapa.has(numero)
+    ) {
+      mapa.set(
+        numero,
+        {
+          numeroCuenta:
+            numero,
+
+          nombre:
+            "Sin nombre",
+
+          carrera:
+            null,
+
+          genero:
+            null,
+
+          registrosPorEvento:
+            new Map(),
+        }
+      );
     }
 
     const estudiante =
       mapa.get(numero);
 
-    const nombre = String(
-      inscripcion.nombre_completo ??
-        ""
-    ).trim();
+    const nombre =
+      String(
+        inscripcion
+          .nombre_completo ??
+          ""
+      ).trim();
 
     const carrera =
       normalizarCarrera(
@@ -474,9 +626,11 @@ function agruparEstudiantes(
     }
 
     const anterior =
-      estudiante.registrosPorEvento.get(
-        inscripcion.evento_id
-      );
+      estudiante
+        .registrosPorEvento
+        .get(
+          inscripcion.evento_id
+        );
 
     const asistio =
       inscripcion.asistio ===
@@ -484,8 +638,11 @@ function agruparEstudiantes(
 
     const asistioEnActual =
       asistio
-        ? inscripcion.asistio_en ??
-          null
+        ? (
+            inscripcion
+              .asistio_en ??
+            null
+          )
         : null;
 
     const asistioEnAnterior =
@@ -499,35 +656,45 @@ function agruparEstudiantes(
       instante(
         asistioEnAnterior
       )
-        ? asistioEnActual ??
-          asistioEnAnterior
+        ? (
+            asistioEnActual ??
+            asistioEnAnterior
+          )
         : asistioEnAnterior;
 
     /*
-     * Un alumno solo cuenta una vez
-     * por evento.
+     * Un alumno cuenta una sola
+     * vez por evento aunque
+     * existan filas duplicadas.
      */
-    estudiante.registrosPorEvento.set(
-      inscripcion.evento_id,
-      {
-        id: inscripcion.id,
+    estudiante
+      .registrosPorEvento
+      .set(
+        inscripcion.evento_id,
+        {
+          id:
+            inscripcion.id,
 
-        eventoId:
-          inscripcion.evento_id,
+          eventoId:
+            inscripcion
+              .evento_id,
 
-        registradoEn:
-          anterior?.registradoEn ??
-          inscripcion.registrado_en ??
-          null,
+          registradoEn:
+            anterior
+              ?.registradoEn ??
+            inscripcion
+              .registrado_en ??
+            null,
 
-        asistio: Boolean(
-          anterior?.asistio ||
-            asistio
-        ),
+          asistio:
+            Boolean(
+              anterior?.asistio ||
+              asistio
+            ),
 
-        asistioEn,
-      }
-    );
+          asistioEn,
+        }
+      );
   }
 
   return [
@@ -556,16 +723,21 @@ function calcularParticipacion(
   estudiante
 ) {
   const totalRegistrados =
-    estudiante.inscripciones.length;
+    estudiante
+      .inscripciones
+      .length;
 
   const totalAsistencias =
-    estudiante.inscripciones.filter(
-      (registro) =>
-        registro.asistio
-    ).length;
+    estudiante
+      .inscripciones
+      .filter(
+        (registro) =>
+          registro.asistio
+      ).length;
 
   return {
     totalRegistrados,
+
     totalAsistencias,
 
     porcentaje:
@@ -587,18 +759,15 @@ function porcentajeVisible(
     );
 
   /*
-   * Evita mostrar 75% si
+   * Evita mostrar 75% cuando
    * realmente es 74.96%.
    */
-  const limite = [
-    50,
-    75,
-    100,
-  ].find(
-    (valor) =>
-      porcentaje < valor &&
-      redondeado >= valor
-  );
+  const limite =
+    [50, 75, 100].find(
+      (valor) =>
+        porcentaje < valor &&
+        redondeado >= valor
+    );
 
   return limite
     ? limite - 0.1
@@ -638,7 +807,9 @@ function coincideBusqueda(
   busqueda
 ) {
   const termino =
-    normalizarTexto(busqueda);
+    normalizarTexto(
+      busqueda
+    );
 
   if (!termino) {
     return true;
@@ -646,17 +817,22 @@ function coincideBusqueda(
 
   return (
     normalizarTexto(
-      estudiante.numeroCuenta
-    ).includes(termino) ||
+      estudiante
+        .numeroCuenta
+    ).includes(
+      termino
+    ) ||
     normalizarTexto(
       estudiante.nombre
-    ).includes(termino)
+    ).includes(
+      termino
+    )
   );
 }
 
 /*
  * =====================================================
- * RESPUESTA ESTUDIANTE
+ * RESPUESTAS
  * =====================================================
  */
 
@@ -682,23 +858,20 @@ function construirEstudiante(
       estudiante.carrera,
 
     totalAsistio:
-      participacion.totalAsistencias,
+      participacion
+        .totalAsistencias,
 
     totalInscribio:
-      participacion.totalRegistrados,
+      participacion
+        .totalRegistrados,
 
     porcentaje:
       porcentajeVisible(
-        participacion.porcentaje
+        participacion
+          .porcentaje
       ),
   };
 }
-
-/*
- * =====================================================
- * DETALLE
- * =====================================================
- */
 
 function construirDetalleAlumno(
   estudiante,
@@ -706,12 +879,14 @@ function construirDetalleAlumno(
 ) {
   const porEvento =
     new Map(
-      estudiante.inscripciones.map(
-        (registro) => [
-          registro.eventoId,
-          registro,
-        ]
-      )
+      estudiante
+        .inscripciones
+        .map(
+          (registro) => [
+            registro.eventoId,
+            registro,
+          ]
+        )
     );
 
   return eventos.map(
@@ -722,22 +897,28 @@ function construirDetalleAlumno(
         );
 
       return {
-        eventoId: evento.id,
+        eventoId:
+          evento.id,
 
         codigoEvento:
-          evento.codigo_evento,
+          evento
+            .codigo_evento,
 
         nombreEvento:
           evento.nombre,
 
         fechaEvento:
-          evento.fecha_evento,
+          evento
+            .fecha_evento,
 
         horaEvento:
-          evento.hora_evento,
+          evento
+            .hora_evento,
 
         inscrito:
-          Boolean(registro),
+          Boolean(
+            registro
+          ),
 
         asistio:
           Boolean(
@@ -746,15 +927,43 @@ function construirDetalleAlumno(
 
         horaAsistencia:
           registro?.asistio
-            ? registro.asistioEn
+            ? registro
+                .asistioEn
             : null,
 
         fechaRegistro:
-          registro?.registradoEn ??
+          registro
+            ?.registradoEn ??
           null,
       };
     }
   );
+}
+
+/*
+ * =====================================================
+ * VALIDAR EVENTOS
+ * =====================================================
+ */
+
+function validarEventosEncontrados(
+  eventos,
+  eventoIds,
+  res
+) {
+  if (
+    eventos.length !==
+    eventoIds.length
+  ) {
+    res.status(400).json({
+      error:
+        "Uno o más eventos seleccionados ya no están disponibles. Recarga la página y revisa la selección.",
+    });
+
+    return false;
+  }
+
+  return true;
 }
 
 /*
@@ -767,7 +976,9 @@ export default async function handler(
   req,
   res
 ) {
-  if (req.method !== "GET") {
+  if (
+    req.method !== "GET"
+  ) {
     res.setHeader(
       "Allow",
       "GET"
@@ -788,8 +999,11 @@ export default async function handler(
 
   try {
     /*
+     * ================================
      * SESIÓN
+     * ================================
      */
+
     const tokenSesion =
       obtenerCookie(
         req,
@@ -814,19 +1028,25 @@ export default async function handler(
         });
     }
 
+    /*
+     * Comprobar que el maestro
+     * siga activo.
+     */
     const {
       data: maestro,
-      error: errorMaestro,
-    } = await supabaseAdmin
-      .from("maestros")
-      .select(
-        "id,rol_sistema,activo"
-      )
-      .eq(
-        "id",
-        sesion.id
-      )
-      .maybeSingle();
+      error:
+        errorMaestro,
+    } =
+      await supabaseAdmin
+        .from("maestros")
+        .select(
+          "id,rol_sistema,activo"
+        )
+        .eq(
+          "id",
+          sesion.id
+        )
+        .maybeSingle();
 
     if (errorMaestro) {
       console.error(
@@ -855,10 +1075,15 @@ export default async function handler(
     }
 
     /*
+     * ================================
      * PARÁMETROS
+     * ================================
      */
+
     const eventoIds =
-      obtenerEventoIds(req);
+      obtenerEventoIds(
+        req
+      );
 
     const carreraRaw =
       typeof req.query
@@ -886,11 +1111,14 @@ export default async function handler(
       typeof req.query
         ?.busqueda ===
       "string"
-        ? req.query.busqueda.trim()
+        ? req.query
+            .busqueda
+            .trim()
         : "";
 
     const modo =
-      typeof req.query?.modo ===
+      typeof req.query
+        ?.modo ===
       "string"
         ? req.query.modo
         : "lista";
@@ -899,7 +1127,9 @@ export default async function handler(
       typeof req.query
         ?.numeroCuenta ===
       "string"
-        ? req.query.numeroCuenta.trim()
+        ? req.query
+            .numeroCuenta
+            .trim()
         : "";
 
     const pagina =
@@ -910,14 +1140,18 @@ export default async function handler(
 
     const porPagina =
       obtenerEntero(
-        req.query?.porPagina,
+        req.query
+          ?.porPagina,
         20,
         1000
       );
 
     /*
+     * ================================
      * VALIDACIONES
+     * ================================
      */
+
     if (!eventoIds.length) {
       return res
         .status(400)
@@ -995,46 +1229,55 @@ export default async function handler(
     }
 
     /*
-     * EVENTOS
+     * =================================================
+     * DETALLE DE UN ALUMNO
+     * =================================================
+     *
+     * Esta ruta está optimizada.
+     *
+     * Antes:
+     *   descargaba TODAS las inscripciones.
+     *
+     * Ahora:
+     *   Supabase devuelve únicamente las
+     *   inscripciones del alumno seleccionado.
      */
-    const eventos =
-      await obtenerEventos(
-        eventoIds
-      );
 
-    if (
-      eventos.length !==
-      eventoIds.length
-    ) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Uno o más eventos seleccionados ya no están disponibles. Recarga la página y revisa la selección.",
-        });
-    }
-
-    /*
-     * INSCRIPCIONES
-     */
-    const inscripciones =
-      await obtenerInscripciones(
-        eventoIds
-      );
-
-    const todosLosEstudiantes =
-      agruparEstudiantes(
-        inscripciones
-      );
-
-    /*
-     * DETALLE DE ALUMNO
-     */
     if (
       modo === "detalle"
     ) {
+      const [
+        eventos,
+        inscripcionesAlumno,
+      ] =
+        await Promise.all([
+          obtenerEventos(
+            eventoIds
+          ),
+
+          obtenerInscripcionesAlumno(
+            eventoIds,
+            numeroCuenta
+          ),
+        ]);
+
+      if (
+        !validarEventosEncontrados(
+          eventos,
+          eventoIds,
+          res
+        )
+      ) {
+        return;
+      }
+
+      const estudiantes =
+        agruparEstudiantes(
+          inscripcionesAlumno
+        );
+
       const estudiante =
-        todosLosEstudiantes.find(
+        estudiantes.find(
           (alumno) =>
             alumno.numeroCuenta ===
             numeroCuenta
@@ -1064,6 +1307,44 @@ export default async function handler(
             ),
         });
     }
+
+    /*
+     * =================================================
+     * REPORTE GENERAL
+     * =================================================
+     *
+     * Eventos e inscripciones se descargan
+     * al mismo tiempo.
+     */
+
+    const [
+      eventos,
+      inscripciones,
+    ] =
+      await Promise.all([
+        obtenerEventos(
+          eventoIds
+        ),
+
+        obtenerInscripciones(
+          eventoIds
+        ),
+      ]);
+
+    if (
+      !validarEventosEncontrados(
+        eventos,
+        eventoIds,
+        res
+      )
+    ) {
+      return;
+    }
+
+    const todosLosEstudiantes =
+      agruparEstudiantes(
+        inscripciones
+      );
 
     /*
      * =================================================
@@ -1097,7 +1378,8 @@ export default async function handler(
 
             if (
               !cumpleFiltroParticipacion(
-                participacion.porcentaje,
+                participacion
+                  .porcentaje,
                 filtroParticipacion
               )
             ) {
@@ -1105,7 +1387,7 @@ export default async function handler(
             }
 
             /*
-             * BUSCADOR
+             * BÚSQUEDA
              */
             if (
               !coincideBusqueda(
@@ -1135,8 +1417,11 @@ export default async function handler(
         );
 
     /*
+     * =================================================
      * ESTADÍSTICAS
+     * =================================================
      */
+
     const participaciones =
       estudiantes.map(
         calcularParticipacion
@@ -1147,7 +1432,10 @@ export default async function handler(
 
     const totalInscripciones =
       participaciones.reduce(
-        (total, valor) =>
+        (
+          total,
+          valor
+        ) =>
           total +
           valor.totalRegistrados,
         0
@@ -1155,7 +1443,10 @@ export default async function handler(
 
     const totalAsistencias =
       participaciones.reduce(
-        (total, valor) =>
+        (
+          total,
+          valor
+        ) =>
           total +
           valor.totalAsistencias,
         0
@@ -1164,27 +1455,33 @@ export default async function handler(
     const promedioParticipacion =
       totalAlumnos > 0
         ? participaciones.reduce(
-            (total, valor) =>
+            (
+              total,
+              valor
+            ) =>
               total +
               valor.porcentaje,
             0
-          ) / totalAlumnos
+          ) /
+          totalAlumnos
         : 0;
 
-    const cantidad = (
-      filtro
-    ) =>
-      participaciones.filter(
-        (valor) =>
-          cumpleFiltroParticipacion(
-            valor.porcentaje,
-            filtro
-          )
-      ).length;
+    const cantidad =
+      (filtro) =>
+        participaciones.filter(
+          (valor) =>
+            cumpleFiltroParticipacion(
+              valor.porcentaje,
+              filtro
+            )
+        ).length;
 
     /*
+     * =================================================
      * PAGINACIÓN
+     * =================================================
      */
+
     const totalPaginas =
       Math.max(
         Math.ceil(
@@ -1201,12 +1498,17 @@ export default async function handler(
       );
 
     const inicio =
-      (paginaReal - 1) *
-      porPagina;
+      (
+        paginaReal -
+        1
+      ) * porPagina;
 
     /*
+     * =================================================
      * CARRERAS DISPONIBLES
+     * =================================================
      */
+
     const carreras = [
       ...new Set(
         todosLosEstudiantes
@@ -1218,38 +1520,47 @@ export default async function handler(
           )
           .filter(Boolean)
       ),
-    ].sort((a, b) =>
-      a.localeCompare(
-        b,
-        "es",
-        {
-          sensitivity: "base",
-        }
-      )
+    ].sort(
+      (a, b) =>
+        a.localeCompare(
+          b,
+          "es",
+          {
+            sensitivity:
+              "base",
+          }
+        )
     );
 
     /*
+     * =================================================
      * RESPUESTA
+     * =================================================
      */
+
     return res
       .status(200)
       .json({
         eventos:
           eventos.map(
             (evento) => ({
-              id: evento.id,
+              id:
+                evento.id,
 
               codigo:
-                evento.codigo_evento,
+                evento
+                  .codigo_evento,
 
               nombre:
                 evento.nombre,
 
               fecha:
-                evento.fecha_evento,
+                evento
+                  .fecha_evento,
 
               hora:
-                evento.hora_evento,
+                evento
+                  .hora_evento,
 
               estado:
                 evento.estado,
@@ -1257,7 +1568,8 @@ export default async function handler(
           ),
 
         filtros: {
-          eventos: eventoIds,
+          eventos:
+            eventoIds,
 
           carrera:
             carrera ?? null,
@@ -1287,7 +1599,9 @@ export default async function handler(
             ),
 
           participacion100:
-            cantidad("100"),
+            cantidad(
+              "100"
+            ),
 
           participacion75_99:
             cantidad(
